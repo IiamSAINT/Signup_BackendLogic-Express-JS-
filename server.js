@@ -1,4 +1,4 @@
-
+require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
@@ -10,8 +10,7 @@ const port = 5000;
 app.use(cors());
 app.use(express.json());
 
-
-const SECRET_KEY = "who_knows_what_this_is"; 
+const SECRET_KEY = process.env.JWT_SECRET 
 
 
 
@@ -49,19 +48,25 @@ app.post("/signup", async (req, res) => {
 // MIDDLEWARE TO PROTECT ROUTES
 
 const verifyToken = (req, res, next) => {
-  const token = req.headers["authorization"];
+  const authHeader = req.headers["authorization"];
 
-  if (!token) {
-    return res.json({ message: "No token provided" });
+  if (!authHeader) {
+  return res.json({ message: "No token provided" });
   }
 
-  try {
+  const token = authHeader.split(" ")[1];
+
+  if (!token) {
+  return res.json({ message: "Invalid token format" });
+  }
+ try {
     const decoded = jwt.verify(token,SECRET_KEY );
     req.user = decoded;
     next();
   } catch (err) {
-    res.json({ message: "Invalid token" });
-  }}
+    res.status(401).json({ message: "Unauthorized" });
+  }};
+ 
 
 
 // LOGIN ENDPOINT 
@@ -100,5 +105,4 @@ app.post("/login",async (req, res) => {
 app.get("/protected", verifyToken, (req, res) => {
   res.json({ message: `Hello ${req.user.username}, you have accessed a protected route!` });
 });
-
 

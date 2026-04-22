@@ -1,11 +1,14 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "../index.css";
 
 const Form = () => {
+  const navigate = useNavigate();
   const [action, setAction] = useState("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [token, setToken] = useState(localStorage.getItem("token") || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -38,8 +41,52 @@ const Form = () => {
         setSuccess(data.message);
         setUsername("");
         setPassword("");
+        setConfirmPassword("");
+        if (data.token) {
+          setToken(data.token);
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("username", data.user);
+          // Redirect to dashboard after 1 second
+          setTimeout(() => {
+            navigate("/dashboard");
+          }, 1000);
+        }
       } else {
         setError(data.message || "An error occurred");
+      }
+    } catch (err) {
+      setError("Failed to connect to the backend.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const callProtectedRoute = async () => {
+    if (!token) {
+      setError("Please login first to access protected route");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const response = await fetch("http://localhost:5000/protected", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSuccess(data.message);
+      } else {
+        setError(data.message || "Failed to access protected route");
       }
     } catch (err) {
       setError("Failed to connect to the backend.");
@@ -175,6 +222,20 @@ const Form = () => {
             </button>
           </div>
         </div>
+
+        {/* Protected Route Button */}
+        {token && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={callProtectedRoute}
+              disabled={loading}
+              className="w-full py-2 px-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition duration-200 disabled:opacity-50"
+            >
+              Access Protected Route
+            </button>
+          </div>
+        )}
 
         {/* Footer */}
         <p className="text-center text-gray-500 text-xs mt-6">
