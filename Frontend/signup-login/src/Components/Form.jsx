@@ -223,19 +223,7 @@ const Form = () => {
           </div>
         </div>
 
-        {/* Protected Route Button */}
-        {token && (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={callProtectedRoute}
-              disabled={loading}
-              className="w-full py-2 px-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition duration-200 disabled:opacity-50"
-            >
-              Access Protected Route
-            </button>
-          </div>
-        )}
+       
 
         {/* Footer */}
         <p className="text-center text-gray-500 text-xs mt-6">

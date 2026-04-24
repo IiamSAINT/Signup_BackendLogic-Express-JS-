@@ -1,17 +1,33 @@
 require("dotenv").config();
-
+const User = require("./models/User");
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const app = express();
 const port = 5000;
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+
+app.use(helmet());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+});
+
+app.use(limiter);
 
 app.use(cors());
 app.use(express.json());
 
 const SECRET_KEY = process.env.JWT_SECRET 
 
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch(err => console.log(err));
 
 
 app.get("/", (req, res) => {
@@ -25,23 +41,25 @@ app.listen(port, () => {
 let users = [];
 
 // SIGNUP ENDPOINT 
-
 app.post("/signup", async (req, res) => {
   const { username, password } = req.body;
-  const userExists = users.some(user => user.username === username);
+
+  const userExists = await User.findOne({ username });
 
   if (userExists) {
-    return res.status(400).send({ message: "Username already exists" });
+    return res.json({ message: "User already exists" });
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  users.push({ username, password: hashedPassword });
 
-  
-  console.log(`User signed up with username: ${username} and password: ${password}`);
-  res.status(201).send( {message: "user created successfully",
-                        user : username
-});
+  const newUser = new User({
+    username,
+    password: hashedPassword
+  });
+
+  await newUser.save();
+
+  res.json({ message: "User created successfully" });
 });
 
 
@@ -71,38 +89,37 @@ const verifyToken = (req, res, next) => {
 
 // LOGIN ENDPOINT 
 
-app.post("/login",async (req, res) => {
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
-  const user = users.find(user => user.username === username);
+  const user = await User.findOne({ username });
 
   if (!user) {
-    return res.status(400).send({ message: "Invalid username or password" });
+    return res.json({ message: "Invalid credentials" });
   }
 
   const isMatch = await bcrypt.compare(password, user.password);
 
   if (!isMatch) {
-    return res.status(400).send({ message: "Invalid username or password" });
-
+    return res.json({ message: "Invalid credentials" });
   }
 
-  if(!username || !password){
-    return res.status(400).send({ message: "Username and password are required" })};
+  const token = jwt.sign(
+    { username: user.username },
+    process.env.JWT_SECRET,
+    { expiresIn: "1h" }
+  );
 
-  const token = jwt.sign({ username }, SECRET_KEY, { expiresIn: "1h" });
-    
-  console.log(`User logged in with username: ${username} and password: ${password}`);
-  res.status(200).send({
-            message: "Logged in Successfully",
-            user: username,
-            token: token
+  res.json({ message: "Login successful", token });
+});
+
+
+
+app.get("/protected", verifyToken, async (req, res) => {
+  const user = await User.findOne({ username: req.user.username });
+
+  res.json({
+    username: user.username,
+    id: user._id
   });
-  
 });
-
-
-app.get("/protected", verifyToken, (req, res) => {
-  res.json({ message: `Hello ${req.user.username}, you have accessed a protected route!` });
-});
-
