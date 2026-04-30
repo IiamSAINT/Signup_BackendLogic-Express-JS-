@@ -11,6 +11,9 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 
 app.use(helmet());
+let refreshTokens = [];
+
+
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -19,10 +22,16 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5173", // your React app
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
+
 app.use(express.json());
 
-const SECRET_KEY = process.env.JWT_SECRET 
+const SECRET_KEY = process.env.JWT_SECRET
 
 
 mongoose.connect(process.env.MONGO_URI)
@@ -69,57 +78,114 @@ const verifyToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
 
   if (!authHeader) {
-  return res.json({ message: "No token provided" });
+    return res.json({ message: "No token provided" });
   }
 
   const token = authHeader.split(" ")[1];
 
   if (!token) {
-  return res.json({ message: "Invalid token format" });
+    return res.status(401).json({ message: "Invalid token format" });
   }
- try {
-    const decoded = jwt.verify(token,SECRET_KEY );
+  try {
+    const decoded = jwt.verify(token, SECRET_KEY);
     req.user = decoded;
     next();
   } catch (err) {
     res.status(401).json({ message: "Unauthorized" });
-  }};
- 
+  }
+};
+
 
 
 // LOGIN ENDPOINT 
-
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
+  try {
+    const { username, password } = req.body;
 
-  const user = await User.findOne({ username });
+    //  Basic validation
+    if (!username || !password) {
+      return res.status(400).json({ message: "All fields required" });
+    }
 
-  if (!user) {
-    return res.json({ message: "Invalid credentials" });
+    //  Find user in DB
+    const user = await User.findOne({ username });
+
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    //  Compare password
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    //  Generate ACCESS TOKEN (short-lived)
+    const accessToken = jwt.sign(
+      { username: user.username, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    //  Generate REFRESH TOKEN (long-lived)
+  const refreshToken = jwt.sign(
+  { username: user.username, role: user.role },
+  process.env.JWT_REFRESH_SECRET,
+  { expiresIn: "7d" }
+);
+
+    //  Store refresh token (temporary)
+    refreshTokens.push(refreshToken);
+
+    //  Send response
+    res.json({
+      message: "Login successful",
+      accessToken,
+      refreshToken
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
-
-  const isMatch = await bcrypt.compare(password, user.password);
-
-  if (!isMatch) {
-    return res.json({ message: "Invalid credentials" });
-  }
-
-  const token = jwt.sign(
-    { username: user.username },
-    process.env.JWT_SECRET,
-    { expiresIn: "1h" }
-  );
-
-  res.json({ message: "Login successful", token });
 });
 
 
+//REFRESH TOKEN ENDPOINT
+app.post("/refresh", (req, res) => {
+  const { refreshToken } = req.body;
 
-app.get("/protected", verifyToken, async (req, res) => {
-  const user = await User.findOne({ username: req.user.username });
+  // Check if token exists
+  if (!refreshToken) {
+    return res.status(401).json({ message: "No refresh token provided" });
+  }
 
-  res.json({
-    username: user.username,
-    id: user._id
-  });
+  // Check if token is valid (stored)
+  if (!refreshTokens.includes(refreshToken)) {
+    return res.status(403).json({ message: "Invalid refresh token" });
+  }
+
+  try {
+    // Verify refresh token
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_SECRET
+    );
+
+    // Generate NEW access token
+  const refreshToken = jwt.sign(
+  { username: user.username, role: user.role },
+  process.env.JWT_REFRESH_SECRET,
+  { expiresIn: "7d" }
+);
+
+    //  Send new token
+    res.json({
+      accessToken: newAccessToken
+    });
+
+  } catch (err) {
+    res.status(403).json({ message: "Invalid or expired refresh token" });
+  }
 });
