@@ -12,6 +12,10 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const SECRET_KEY = process.env.JWT_SECRET;
 const REFRESH_SECRET_KEY = process.env.JWT_REFRESH_SECRET;
+const clientUrls = (process.env.CLIENT_URL || "")
+  .split(",")
+  .map(url => url.trim().replace(/\/$/, ""))
+  .filter(Boolean);
 
 app.use(helmet());
 let refreshTokens = [];
@@ -31,10 +35,12 @@ app.use(cors({
       "http://localhost:5174",
       "http://127.0.0.1:5173",
       "http://127.0.0.1:5174",
-      process.env.CLIENT_URL
+      ...clientUrls
     ];
 
-    if (!origin || allowedOrigins.filter(Boolean).includes(origin)) {
+    const normalizedOrigin = origin && origin.replace(/\/$/, "");
+
+    if (!normalizedOrigin || allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
 
