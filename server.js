@@ -14,7 +14,6 @@ app.use(helmet());
 let refreshTokens = [];
 
 
-
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100
@@ -84,7 +83,7 @@ const verifyToken = (req, res, next) => {
   const token = authHeader.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ message: "Invalid token format" });
+    return res.json({ message: "Invalid token format" });
   }
   try {
     const decoded = jwt.verify(token, SECRET_KEY);
@@ -129,11 +128,11 @@ app.post("/login", async (req, res) => {
     );
 
     //  Generate REFRESH TOKEN (long-lived)
-  const refreshToken = jwt.sign(
-  { username: user.username, role: user.role },
-  process.env.JWT_REFRESH_SECRET,
-  { expiresIn: "7d" }
-);
+    const refreshToken = jwt.sign(
+      { username: user.username },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" }
+    );
 
     //  Store refresh token (temporary)
     refreshTokens.push(refreshToken);
@@ -152,7 +151,8 @@ app.post("/login", async (req, res) => {
 });
 
 
-//REFRESH TOKEN ENDPOINT
+// REFRESH ROUTE
+
 app.post("/refresh", (req, res) => {
   const { refreshToken } = req.body;
 
@@ -174,13 +174,15 @@ app.post("/refresh", (req, res) => {
     );
 
     // Generate NEW access token
-  const refreshToken = jwt.sign(
-  { username: user.username, role: user.role },
-  process.env.JWT_REFRESH_SECRET,
-  { expiresIn: "7d" }
-);
+    const newAccessToken = jwt.sign(
+      {
+        username: decoded.username
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
 
-    //  Send new token
+    // Send new token
     res.json({
       accessToken: newAccessToken
     });
